@@ -9,11 +9,14 @@
 #include "lapl_functions.h"
 #include "test_runner.h"
 #include "series.h"
+#include "auxillary.h"
 #include <fstream>
 #include <string>
 #include <sstream>
 #include <limits>
 #include <cmath>
+#include <random>
+#include <ctime>
 
 using namespace std;
 
@@ -47,51 +50,86 @@ double SexpGuaranteed(const double yed, const double ek) {
 }
 
 void Test_sexp() {
-	const double TEST_SEXP_EPS = 1e-15;
-	const double xed_max = 1000;
-	const double u_min = 1e-9;
+	const double TEST_SEXP_EPS = 1e-14;
+	const double NTESTS = 1000'000;
+	const int N = 20;
+	const int KMAX = 1000;
+	const double xed_min = 1;
+	const double xed_max  = 1000;
 	const double yed_min = 1;
-	auto ek = LaplFunc::ek(u_min, xed_max, 0);
-	auto sexp = LaplFunc::sexp(yed_min, TEST_SEXP_EPS);
-	ASSERT_CLOSE(sexp(ek(1)), SexpGuaranteed(yed_min, ek(1)), TEST_SEXP_EPS);
+	const double yed_max = 1000;
+	const double u_min = 1e-9;
+	const double u_max = 1000;
+
+	const auto xeds = LogSpaced(xed_min, xed_max, N);
+	const auto yeds = LogSpaced(yed_min, yed_max, N);
+	const auto us = LogSpaced(u_min, u_max, N);
+
+	mt19937 rng;
+	rng.seed(time(nullptr));
+	uniform_int_distribution<std::mt19937::result_type> dist(0, N-1);
+	uniform_int_distribution<std::mt19937::result_type> k_dist(1, KMAX);
+
+	for (int i = 0; i < NTESTS; ++i) {
+		auto x_ind = dist(rng);
+		auto y_ind = dist(rng);
+		auto u_ind = dist(rng);
+		double u = us[u_ind];
+		double xed = xeds[x_ind];
+		double yed = yeds[y_ind];
+		auto ek = LaplFunc::ek(u, xed, 0);
+		auto sexp = LaplFunc::sexp(yed, TEST_SEXP_EPS/100., LaplFunc::SumAlgo::epsalg);
+		int64_t k = k_dist(rng);
+		auto s = sexp(ek(k));
+		ASSERT_CLOSE(s, SexpGuaranteed(yed, ek(k)), TEST_SEXP_EPS);
+	}
 }
 
+
 void Test_sexp_speed() {
-	const double TEST_SEXP_EPS = 1e-15;
-	const double xed_max = 1000;
-	const double u_min = 1e-9;
-	const double yed_min = 1;
-	auto ek = LaplFunc::ek(u_min, xed_max, 0);
+	const double TEST_SEXP_EPS = 1e-14;
+		const int NTESTS = 1000'000;
+		const int N = 20;
+		const int KMAX = 10;
+		const double xed_min = 1;
+		const double xed_max  = 1000;
+		const double yed_min = 1;
+		const double yed_max = 1000;
+		const double u_min = 1e-9;
+		const double u_max = 1000;
 
+		const auto xeds = LogSpaced(xed_min, xed_max, N);
+		const auto yeds = LogSpaced(yed_min, yed_max, N);
+		const auto us = LogSpaced(u_min, u_max, N);
 
-	double d;
-	{
-		auto sexp = LaplFunc::sexp(yed_min, TEST_SEXP_EPS);
-		int n = 50'000;
+		mt19937 rng;
+		rng.seed(time(nullptr));
+		uniform_int_distribution<std::mt19937::result_type> dist(0, N-1);
+		uniform_int_distribution<std::mt19937::result_type> k_dist(1, KMAX);
 
-		LOG_DURATION("Sexp with Epsalg " + to_string(n) + " iterations");
-		for (int i = 0; i < n; ++i) {
-			d = sexp(ek(1));
+		double s;
+
+		ostringstream os;
+
+		os << "Num tests: ";
+		os << fixed << to_string(NTESTS);
+		os << ", duration: ";
+
+		{LOG_DURATION(os.str());
+			for (int i = 0; i < NTESTS; ++i) {
+				auto x_ind = dist(rng);
+				auto y_ind = dist(rng);
+				auto u_ind = dist(rng);
+				double u = us[u_ind];
+				double xed = xeds[x_ind];
+				double yed = yeds[y_ind];
+				auto ek = LaplFunc::ek(u, xed, 0);
+				auto sexp = LaplFunc::sexp(yed, TEST_SEXP_EPS/100., LaplFunc::SumAlgo::epsalg);
+				int64_t k = k_dist(rng);
+				s = sexp(ek(k));
+			}
 		}
-	}
-	{
-		auto sexp = LaplFunc::sexp(yed_min, TEST_SEXP_EPS, LaplFunc::SumAlgo::levin);
-		int n = 50'000;
-
-		LOG_DURATION("Sexp with Levin " + to_string(n) + " iterations");
-		for (int i = 0; i < n; ++i) {
-			d = sexp(ek(1));
-		}
-	}
-	{
-		int n = 500;
-
-		LOG_DURATION("Plain summation to numeric limit " + to_string(n) + " iterations");
-		for (int i = 0; i < n; ++i) {
-			d = SexpGuaranteed(yed_min, ek(1));
-		}
-	}
-	cerr << d << endl;
+		cerr << s << endl;
 }
 
 void Test_sexp_get_k() {

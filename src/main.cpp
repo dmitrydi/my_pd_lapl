@@ -14,6 +14,7 @@
 #include "series.h"
 #include "lapl_functions.h"
 #include "lapl_tests.h"
+#include "auxillary.h"
 #include <iostream>
 #include <iomanip>
 #include <random>
@@ -29,7 +30,9 @@ int main()
 {
 	TestRunner tr;
 	RUN_TEST(tr, Test_ek);
+	RUN_TEST(tr, TestLogSpaced);
 	RUN_TEST(tr, Test_sexp);
 	RUN_TEST(tr, Test_sexp_speed);
+
 }
 

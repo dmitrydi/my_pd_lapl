@@ -11,6 +11,8 @@
 
 using namespace std;
 
+static const double SMALL = numeric_limits<double>::min()*10.0;
+
 template <class T>
 ostream& operator << (ostream& os, const vector<T>& s) {
   os << "{";
@@ -80,7 +82,7 @@ void AssertEqual(const T& t, const U& u, const string& hint = {}) {
 }
 
 bool IsClose(const double x, const double y, const double eps) {
-	return abs((x-y)/y) < eps;
+	return (abs(x) < SMALL && abs(y) < SMALL) || abs(x-y) < eps*abs(y) || abs(x-y) < SMALL;
 }
 
 template<class T>

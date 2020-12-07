@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <iostream>
 #include <array>
+#include <sstream>
+#include <iomanip>
 
 static const int64_t MAX_LONG_VAL = std::numeric_limits<int64_t>::max();
 static const int MAX_POWER_2 = static_cast<int>(std::log2(MAX_LONG_VAL));
@@ -128,17 +130,26 @@ RetFormBack BackSum(SeriesWrapper<F>& sw, const double eps, const int64_t step, 
 // Summates series wraped in sw
 // Summation in performed by chunks of size step, each is summated in backward direction (over interval of indices [i, i+ step) )
 	double sum = 0., old_sum = 0., d;
-	const double small = std::numeric_limits<double>::min()*10.0;
 	int i;
 	for (i = 0; i < maxit; ++i) {
 		sum += PartSum(sw, step);
 		d = std::abs((sum - old_sum)/sum);
-		if ((std::abs(sum - old_sum) < eps*std::abs(sum)) || (std::abs(sum) < small)) {
+		if ((std::abs(sum - old_sum) < eps*std::abs(sum)) || (std::abs(sum - old_sum) < SMALL_CONST)) {
 			return {sum, d, i};
 		}
 		old_sum = sum;
 	}
-	throw std::runtime_error("In BackSum: series did not converge in" + std::to_string(step*maxit));
+	std::ostringstream os;
+	os << "In BackSum: series did not converge in ";
+	os << step*maxit;
+	os << ", ";
+	os << " delta = ";
+	os << std::scientific << std::abs(sum-old_sum);
+	os << " eps: ";
+	os << std::scientific << std::abs((sum-old_sum)/sum);
+	os << " sum = " << sum;
+	os << " delta = " << abs(sum - old_sum);
+	throw std::runtime_error(os.str());
 	return {};
 }
 
