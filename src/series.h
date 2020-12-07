@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "series_wrappers.h"
 #include <cmath>
 #include <vector>
 #include <limits>
@@ -14,23 +15,17 @@
 #include <string>
 #include <utility>
 #include <cstdint>
+#include <iostream>
+#include <array>
 
-static int64_t MAX_LONG_VAL = std::numeric_limits<int64_t>::max();
-static int MAX_POWER_2 = static_cast<int>(std::log2(MAX_LONG_VAL));
-static int WIJN_MAX_R = 100;
-static int WIJN_STEP = 5;
-static int MAX_WIJN_ITER = static_cast<int>(std::log2(MAX_LONG_VAL/WIJN_MAX_R))/WIJN_STEP;
-static double WIJN_EPS = 1e-12;
-
-void PrintConstants() {
-	std::cout << "MAX_LONG_VAL " << MAX_LONG_VAL << std::endl;
-	std::cout << "MAX_POWER_2 " << MAX_POWER_2 << std::endl;
-	std::cout << "WIJN_MAX_R " << WIJN_MAX_R << std::endl;
-	std::cout << "WIJN_STEP " << WIJN_STEP << std::endl;
-	std::cout << "MAX_WIJN_ITER " << MAX_WIJN_ITER << std::endl;
-}
-
-
+static const int64_t MAX_LONG_VAL = std::numeric_limits<int64_t>::max();
+static const int MAX_POWER_2 = static_cast<int>(std::log2(MAX_LONG_VAL));
+static const int WIJN_MAX_R = 100;
+static const int WIJN_STEP = 5;
+static const int MAX_WIJN_ITER = static_cast<int>(std::log2(MAX_LONG_VAL/WIJN_MAX_R))/WIJN_STEP;
+static const double WIJN_EPS = 1e-30;
+static const double SMALL_CONST = std::numeric_limits<double>::min()*10.0;
+static const double BIG_CONST = std::numeric_limits<double>::max();
 
 struct Epsalg {
 //Convergence acceleration of a sequence by the  algorithm. Initialize by calling the constructor
@@ -45,8 +40,8 @@ struct Epsalg {
 										  //overflow limits.
 	Epsalg(int nmax, double epss) : e(nmax), n(0), ncv(0),
 		cnvgd(0), eps(epss), lastval(0.) {
-			small = std::numeric_limits<double>::min()*10.0;
-			big = std::numeric_limits<double>::max();
+			small = SMALL_CONST;
+			big = BIG_CONST;
 		}
 	double next(double sum) {
 		double diff,temp1,temp2,val;
@@ -56,15 +51,15 @@ struct Epsalg {
 			temp1=temp2;
 			temp2=e[j-1];
 			diff=e[j]-temp2;
-			if (abs(diff) <= small)
+			if (std::abs(diff) <= small)
 			e[j-1]=big;
 			else
 			e[j-1]=temp1+1.0/diff;
 		}
 		n++;
 		val = (n & 1) ? e[0] : e[1]; //Cases of n even or odd.
-		if (abs(val) > 0.01*big) val = lastval;
-		lasteps = abs(val-lastval);
+		if (std::abs(val) > 0.01*big) val = lastval;
+		lasteps = std::abs(val-lastval);
 		if (lasteps > eps) ncv = 0;
 		else ncv++;
 		if (ncv >= 3) cnvgd = 1;
@@ -78,15 +73,16 @@ struct Levin {
 	//epss, the desired accuracy. Then make successive calls to the function next, which returns
 	//the current estimate of the limit of the sequence. The flag cnvgd is set when convergence is
 	//detected.
-	std::vector<double> numer,denom; //Numerator and denominator computed via (5.3.16).
+	std::array<double, WIJN_MAX_R> numer,denom; //Numerator and denominator computed via (5.3.16).
 	int n,ncv;
 	bool cnvgd;
 	double small,big; //Numbers near machine underflow and overflow limits.
 	double eps,lastval,lasteps;
-	Levin(int nmax, double epss) : numer(nmax), denom(nmax), n(0), ncv(0),
+	// numer(nmax), denom(nmax),
+	Levin(int nmax, double epss) : n(0), ncv(0),
 			cnvgd(0), eps(epss), lastval(0.) {
-		small=std::numeric_limits<double>::min()*10.0;
-		big=std::numeric_limits<double>::max();
+		small=SMALL_CONST;
+		big=BIG_CONST;
 	}
 	double next(double sum, double omega, double beta=1.) {
 	//Arguments: sum, the nth partial sum of the sequence; omega, the nth remainder estimate
@@ -97,6 +93,7 @@ struct Levin {
 		term=1.0/(beta+n);
 		denom[n]=term/omega;
 		numer[n]=sum*denom[n];
+
 		if (n > 0) {
 			ratio=(beta+n-1)*term;
 			for (j=1;j<=n;j++) {
@@ -107,88 +104,17 @@ struct Levin {
 			}
 		}
 		n++;
-		val = abs(denom[0]) < small ? lastval : numer[0]/denom[0];
-		lasteps = abs(val-lastval);
+		if (std::abs(denom[0]) < small) {
+			val = lastval;
+		} else {
+			val = numer[0]/denom[0];
+		}
+		lasteps = std::abs(val-lastval);
 		if (lasteps <= eps) ncv++;
 		if (ncv >= 2) cnvgd = 1;
-		return (lastval = val);
+		lastval = val;
+		return lastval;
 	}
-};
-
-template <typename Func>
-class SeriesWrapper {
-public:
-	virtual void inc_cntr() = 0;
-	virtual void dec_cntr() = 0;
-	virtual int64_t jump(int64_t steps) = 0;
-	virtual double get_val() = 0;
-	virtual void assign_cntr(const int64_t val) = 0;
-};
-
-template <typename F>
-class ForwardWrapper: public SeriesWrapper<F> {
-public:
-	ForwardWrapper(F& fun, int i_min): f(fun), i(i_min) {};
-	void inc_cntr() { ++i; };
-	void dec_cntr() { --i; };
-	int64_t jump(int64_t steps) { i += steps; return i;};
-	void assign_cntr(const int64_t val) { i = val; };
-	double get_val() {return f(i); };
-private:
-	F& f;
-	int64_t i;
-};
-
-template <typename F>
-class BackwardWrapper: public SeriesWrapper<F> {
-public:
-	BackwardWrapper(F& fun, int i_min): f(fun), i(i_min) {};
-	void inc_cntr() { --i; };
-	void dec_cntr() { ++i; };
-	int64_t jump(int64_t steps) { i -= steps; return i;};
-	void assign_cntr(const int64_t val) { i = val; };
-	double get_val() {return f(i); };
-private:
-	F& f;
-	int64_t i;
-};
-
-
-template <typename F>
-class WijnWrapper: public SeriesWrapper<F> {
-public:
-	WijnWrapper(F& fun, int r_): f(fun), r(r_) {mult = 1;};
-	void inc_cntr() {
-		mult *= 2;
-	};
-	void dec_cntr() {
-		if (mult > 1) {
-			mult /= 2;
-		} else {
-			throw std::underflow_error("error in decrement in WijnWrapper\n");
-		}
-	};
-	int64_t jump(int64_t steps) {
-		int64_t before = mult;
-		for (int i = 0; i < steps; i++) {
-			mult *= 2;
-		}
-		if (mult < 1) {
-			throw std::underflow_error(std::to_string(before));
-		}
-
-		return mult;
-	}
-	void assign_cntr(const int64_t val) {
-		mult = val;
-	}
-	double get_val() {
-		return static_cast<double>(mult) * f(r*mult);
-	};
-private:
-	F& f;
-	int64_t r;
-	int64_t mult;
 };
 
 struct RetFormBack {
@@ -206,8 +132,8 @@ RetFormBack BackSum(SeriesWrapper<F>& sw, const double eps, const int64_t step, 
 	int i;
 	for (i = 0; i < maxit; ++i) {
 		sum += PartSum(sw, step);
-		d = abs((sum - old_sum)/sum);
-		if ((abs(sum - old_sum) < eps*abs(sum)) || (abs(sum) < small)) {
+		d = std::abs((sum - old_sum)/sum);
+		if ((std::abs(sum - old_sum) < eps*std::abs(sum)) || (std::abs(sum) < small)) {
 			return {sum, d, i};
 		}
 		old_sum = sum;
@@ -239,7 +165,7 @@ double PartSum(SeriesWrapper<F>& sw, const int64_t steps) {
 
 template <typename F>
 double LevinDSum(F& func, const bool from_zero_i, const double eps = 1e-9) {
-	Levin lev(MAX_WIJN_ITER, eps);
+	Levin lev(WIJN_MAX_R, eps);
 	double sum = from_zero_i ? func(0): 0.; // for series starting with 0 index calculate zero-member
 											// as in WijnWaarden transformation seriaes start from index 1
 	double omega;
@@ -247,13 +173,33 @@ double LevinDSum(F& func, const bool from_zero_i, const double eps = 1e-9) {
 	const double beta = 1.;
 	int sign = 1;
 	for (int64_t r = 1; r < WIJN_MAX_R; ++r) {
-		auto wrap = WijnWrapper<F>(func, r);
+		auto wrap = Wrappers::Wijn<F>(func, r);
 		omega = sign * BackSum(wrap, WIJN_EPS, WIJN_STEP, MAX_WIJN_ITER).sum;
 		ans = lev.next(sum, omega, beta);
 		if (lev.cnvgd) {
 			return ans;
 		}
 		sum += omega;
+		sign *= -1;
+	}
+	throw std::runtime_error("Levin did not converge in: " + std::to_string(WIJN_MAX_R));
+}
+
+template <typename F>
+double EpsSum(F& func, const bool from_zero_i, const double eps = 1e-9) {
+	Epsalg epsalg(WIJN_MAX_R, eps);
+	double sum = from_zero_i ? func(0): 0.;
+	double next_member;
+	double ans;
+	int sign = 1;
+	for (int64_t r = 1; r < WIJN_MAX_R; ++r) {
+		auto wrap = Wrappers::Wijn<F>(func, r);
+		next_member = sign * BackSum(wrap, WIJN_EPS, WIJN_STEP, MAX_WIJN_ITER).sum;
+		ans = epsalg.next(sum);
+		if (epsalg.cnvgd) {
+			return ans;
+		}
+		sum += next_member;
 		sign *= -1;
 	}
 	throw std::runtime_error("Levin did not converge in: " + std::to_string(WIJN_MAX_R));

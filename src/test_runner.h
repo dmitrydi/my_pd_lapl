@@ -79,6 +79,17 @@ void AssertEqual(const T& t, const U& u, const string& hint = {}) {
   }
 }
 
+bool IsClose(const double x, const double y, const double eps) {
+	return abs((x-y)/y) < eps;
+}
+
+template<class T>
+void AssertClose(const T& t, const T& u, const T& eps, const string& hint = {}) {
+	if (!IsClose(t, u, eps)) {
+		AssertEqual(t, u, hint);
+	}
+}
+
 inline void Assert(bool b, const string& hint) {
   AssertEqual(b, true, hint);
 }
@@ -115,6 +126,13 @@ private:
   os << #x << " != " << #y << ", "      \
     << __FILE__ << ":" << __LINE__;     \
   AssertEqual(x, y, os.str());          \
+}
+
+#define ASSERT_CLOSE(x, y, eps) { 		\
+	ostringstream os;					\
+	os << abs(x-y)/abs(y) << ", "	\
+	<<__FILE__ << ":" << __LINE__;		\
+	AssertClose(x, y, eps, os.str());				\
 }
 
 #define ASSERT(x) {                     \
